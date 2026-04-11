@@ -1,19 +1,17 @@
 import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_values
+import os
 
-print("Starting database import...")
+print("Starting database import to NeonDB...")
 
-# Connect to database
+# Connect to NeonDB
 try:
     conn = psycopg2.connect(
-        host="localhost",
-        database="boldanalytics_db",
-        user="postgres",
-        password="spk2105@",  # 🔁 change if needed
-        port="5432"
+        os.environ.get("DATABASE_URL") or 
+        "postgresql://neondb_owner:npg_H4xktPAdmSI6@ep-bold-bread-amxq3u4e.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require"
     )
-    print("✓ Connected to database")
+    print("✓ Connected to NeonDB")
 except Exception as e:
     print(f"✗ Connection failed: {e}")
     exit(1)

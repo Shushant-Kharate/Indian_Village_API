@@ -9,19 +9,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Database connection pool
+// Database connection pool - optimized for serverless
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+  max: 1,  // Only 1 connection for serverless
+  idleTimeoutMillis: 10000,  // Close idle connections after 10s
+  connectionTimeoutMillis: 5000,  // Timeout after 5s
 });
 
 // Test database connection
 pool.query('SELECT NOW()', (err, result) => {
   if (err) {
-    console.error('❌ Database connection failed:', err);
+    console.error('❌ Database connection failed:', err.message);
+    console.error('Full error:', err);
   } else {
     console.log('✓ Database connected:', result.rows[0].now);
   }
@@ -119,10 +120,10 @@ app.get('/api/hierarchy/:stateCode/:districtCode/:subdistrictCode', async (req, 
 // 7. Get statistics
 app.get('/api/stats', async (req, res) => {
   try {
-    const states = await pool.query('SELECT COUNT(*) FROM states');
-    const districts = await pool.query('SELECT COUNT(*) FROM districts');
-    const subdistricts = await pool.query('SELECT COUNT(*) FROM subdistricts');
-    const villages = await pool.query('SELECT COUNT(*) FROM villages');
+    const states = await pool.query('SELECT COUNT(*) as count FROM states');
+    const districts = await pool.query('SELECT COUNT(*) as count FROM districts');
+    const subdistricts = await pool.query('SELECT COUNT(*) as count FROM subdistricts');
+    const villages = await pool.query('SELECT COUNT(*) as count FROM villages');
     
     res.json({
       states: parseInt(states.rows[0].count),
@@ -131,26 +132,38 @@ app.get('/api/stats', async (req, res) => {
       villages: parseInt(villages.rows[0].count),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Stats error:', err);
+    res.status(500).json({ error: err.message || 'Database query failed', code: err.code });
   }
 });
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'API is running ✓' });
+  res.json({ 
+    status: 'API is running ✓',
+    hasDatabase: !!process.env.DATABASE_URL,
+    nodeEnv: process.env.NODE_ENV
+  });
 });
 
 // Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📚 API Documentation:`);
-  console.log(`  GET /api/states - Get all states`);
-  console.log(`  GET /api/districts/:stateCode - Get districts by state`);
-  console.log(`  GET /api/subdistricts/:districtCode - Get subdistricts by district`);
-  console.log(`  GET /api/villages/:subdistrictCode - Get villages by subdistrict`);
-  console.log(`  GET /api/villages/search/:name - Search villages by name`);
-  console.log(`  GET /api/hierarchy/:stateCode/:districtCode/:subdistrictCode - Get full hierarchy`);
-  console.log(`  GET /api/stats - Get statistics`);
-  console.log(`  GET /api/health - Health check\n`);
-});
+
+// Only listen locally (not on Vercel serverless)
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Server running on http://localhost:${PORT}`);
+    console.log(`📚 API Documentation:`);
+    console.log(`  GET /api/states - Get all states`);
+    console.log(`  GET /api/districts/:stateCode - Get districts by state`);
+    console.log(`  GET /api/subdistricts/:districtCode - Get subdistricts by district`);
+    console.log(`  GET /api/villages/:subdistrictCode - Get villages by subdistrict`);
+    console.log(`  GET /api/villages/search/:name - Search villages by name`);
+    console.log(`  GET /api/hierarchy/:stateCode/:districtCode/:subdistrictCode - Get full hierarchy`);
+    console.log(`  GET /api/stats - Get statistics`);
+    console.log(`  GET /api/health - Health check\n`);
+  });
+}
+
+// Export app for Vercel serverless environment
+module.exports = app;
