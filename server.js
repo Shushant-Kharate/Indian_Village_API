@@ -28,15 +28,40 @@ pool.query('SELECT NOW()', (err, result) => {
   }
 });
 
+// Standard response helper functions
+const sendResponse = (res, data, statusCode = 200) => {
+  const isArray = Array.isArray(data);
+  res.status(statusCode).json({
+    success: true,
+    count: isArray ? data.length : undefined,
+    data: data,
+    meta: {
+      responseTime: new Date().toISOString(),
+      requestId: `req_${Math.random().toString(36).substr(2, 9)}`
+    }
+  });
+};
+
+const sendError = (res, message, statusCode = 500) => {
+  res.status(statusCode).json({
+    success: false,
+    error: message,
+    meta: {
+      responseTime: new Date().toISOString(),
+      requestId: `req_${Math.random().toString(36).substr(2, 9)}`
+    }
+  });
+};
+
 // Routes
 
 // 1. Get all states
 app.get('/api/states', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM states ORDER BY state_name');
-    res.json(result.rows);
+    sendResponse(res, result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err.message);
   }
 });
 
@@ -48,9 +73,9 @@ app.get('/api/districts/:stateCode', async (req, res) => {
       'SELECT * FROM districts WHERE state_code = $1 ORDER BY district_name',
       [stateCode]
     );
-    res.json(result.rows);
+    sendResponse(res, result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err.message);
   }
 });
 
@@ -62,9 +87,9 @@ app.get('/api/subdistricts/:districtCode', async (req, res) => {
       'SELECT * FROM subdistricts WHERE district_code = $1 ORDER BY subdistrict_name',
       [districtCode]
     );
-    res.json(result.rows);
+    sendResponse(res, result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err.message);
   }
 });
 
@@ -76,9 +101,9 @@ app.get('/api/villages/:subdistrictCode', async (req, res) => {
       'SELECT * FROM villages WHERE subdistrict_code = $1 ORDER BY village_name LIMIT 1000',
       [subdistrictCode]
     );
-    res.json(result.rows);
+    sendResponse(res, result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err.message);
   }
 });
 
@@ -90,9 +115,9 @@ app.get('/api/villages/search/:name', async (req, res) => {
       'SELECT * FROM villages WHERE LOWER(village_name) LIKE LOWER($1) LIMIT 100',
       [`%${name}%`]
     );
-    res.json(result.rows);
+    sendResponse(res, result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err.message);
   }
 });
 
@@ -111,9 +136,9 @@ app.get('/api/hierarchy/:stateCode/:districtCode/:subdistrictCode', async (req, 
       ORDER BY v.village_name`,
       [stateCode, districtCode, subdistrictCode]
     );
-    res.json(result.rows);
+    sendResponse(res, result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sendError(res, err.message);
   }
 });
 
@@ -124,22 +149,21 @@ app.get('/api/stats', async (req, res) => {
     const districts = await pool.query('SELECT COUNT(*) as count FROM districts');
     const subdistricts = await pool.query('SELECT COUNT(*) as count FROM subdistricts');
     const villages = await pool.query('SELECT COUNT(*) as count FROM villages');
-    
-    res.json({
+
+    sendResponse(res, {
       states: parseInt(states.rows[0].count),
       districts: parseInt(districts.rows[0].count),
       subdistricts: parseInt(subdistricts.rows[0].count),
-      villages: parseInt(villages.rows[0].count),
+      villages: parseInt(villages.rows[0].count)
     });
   } catch (err) {
-    console.error('Stats error:', err);
-    res.status(500).json({ error: err.message || 'Database query failed', code: err.code });
+    sendError(res, err.message);
   }
 });
 
-// Health check
+// 8. Health check
 app.get('/api/health', (req, res) => {
-  res.json({ 
+  sendResponse(res, {
     status: 'API is running ✓',
     hasDatabase: !!process.env.DATABASE_URL,
     nodeEnv: process.env.NODE_ENV
