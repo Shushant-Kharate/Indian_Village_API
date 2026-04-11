@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const auth = require('./auth');
 
 const app = express();
 
@@ -53,10 +54,83 @@ const sendError = (res, message, statusCode = 500) => {
   });
 };
 
+// PUBLIC AUTH ENDPOINTS (No authentication required)
+
+// Register new user
+app.post('/auth/register', async (req, res) => {
+  try {
+    const { email, password, name } = req.body;
+    
+    if (!email || !password) {
+      return sendError(res, 'Email and password are required', 400);
+    }
+
+    const user = await auth.register(email, password, name || 'User');
+    sendResponse(res, { user, message: 'User registered successfully' });
+  } catch (err) {
+    sendError(res, err.message, 400);
+  }
+});
+
+// Login user
+app.post('/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return sendError(res, 'Email and password are required', 400);
+    }
+
+    const result = await auth.login(email, password);
+    sendResponse(res, { 
+      token: result.token,
+      userId: result.userId,
+      email: result.email,
+      name: result.name,
+      message: 'Login successful'
+    });
+  } catch (err) {
+    sendError(res, err.message, 401);
+  }
+});
+
+// PROTECTED ENDPOINTS (Authentication required)
+
+// Generate API key
+app.post('/auth/api-keys', auth.authMiddleware, async (req, res) => {
+  try {
+    const apiKey = await auth.generateApiKey(req.userId);
+    sendResponse(res, { apiKey, message: 'API key generated successfully' }, 201);
+  } catch (err) {
+    sendError(res, err.message);
+  }
+});
+
+// Get user's API keys
+app.get('/auth/api-keys', auth.authMiddleware, async (req, res) => {
+  try {
+    const apiKeys = await auth.getUserApiKeys(req.userId);
+    sendResponse(res, apiKeys);
+  } catch (err) {
+    sendError(res, err.message);
+  }
+});
+
+// Revoke API key
+app.delete('/auth/api-keys/:keyId', auth.authMiddleware, async (req, res) => {
+  try {
+    const { keyId } = req.params;
+    const result = await auth.revokeApiKey(req.userId, keyId);
+    sendResponse(res, { message: 'API key revoked successfully' });
+  } catch (err) {
+    sendError(res, err.message, 400);
+  }
+});
+
 // Routes
 
 // 1. Get all states
-app.get('/api/states', async (req, res) => {
+app.get('/api/states', auth.authMiddleware, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM states ORDER BY state_name');
     sendResponse(res, result.rows);
@@ -66,7 +140,7 @@ app.get('/api/states', async (req, res) => {
 });
 
 // 2. Get districts by state
-app.get('/api/districts/:stateCode', async (req, res) => {
+app.get('/api/districts/:stateCode', auth.authMiddleware, async (req, res) => {
   try {
     const { stateCode } = req.params;
     const result = await pool.query(
@@ -80,7 +154,7 @@ app.get('/api/districts/:stateCode', async (req, res) => {
 });
 
 // 3. Get subdistricts by district
-app.get('/api/subdistricts/:districtCode', async (req, res) => {
+app.get('/api/subdistricts/:districtCode', auth.authMiddleware, async (req, res) => {
   try {
     const { districtCode } = req.params;
     const result = await pool.query(
@@ -94,7 +168,7 @@ app.get('/api/subdistricts/:districtCode', async (req, res) => {
 });
 
 // 4. Get villages by subdistrict
-app.get('/api/villages/:subdistrictCode', async (req, res) => {
+app.get('/api/villages/:subdistrictCode', auth.authMiddleware, async (req, res) => {
   try {
     const { subdistrictCode } = req.params;
     const result = await pool.query(
@@ -108,7 +182,7 @@ app.get('/api/villages/:subdistrictCode', async (req, res) => {
 });
 
 // 5. Search villages by name
-app.get('/api/villages/search/:name', async (req, res) => {
+app.get('/api/villages/search/:name', auth.authMiddleware, async (req, res) => {
   try {
     const { name } = req.params;
     const result = await pool.query(
@@ -122,7 +196,7 @@ app.get('/api/villages/search/:name', async (req, res) => {
 });
 
 // 6. Get full hierarchy (state -> district -> subdistrict -> village)
-app.get('/api/hierarchy/:stateCode/:districtCode/:subdistrictCode', async (req, res) => {
+app.get('/api/hierarchy/:stateCode/:districtCode/:subdistrictCode', auth.authMiddleware, async (req, res) => {
   try {
     const { stateCode, districtCode, subdistrictCode } = req.params;
     const result = await pool.query(
@@ -143,7 +217,7 @@ app.get('/api/hierarchy/:stateCode/:districtCode/:subdistrictCode', async (req, 
 });
 
 // 7. Get statistics
-app.get('/api/stats', async (req, res) => {
+app.get('/api/stats', auth.authMiddleware, async (req, res) => {
   try {
     const states = await pool.query('SELECT COUNT(*) as count FROM states');
     const districts = await pool.query('SELECT COUNT(*) as count FROM districts');
