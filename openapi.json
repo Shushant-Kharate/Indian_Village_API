@@ -1,0 +1,508 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Village API",
+    "description": "Indian Village Address Database API - REST API to search and access data about villages across 28 Indian states",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Village API Support",
+      "email": "support@villageapi.com"
+    },
+    "license": {
+      "name": "Commercial",
+      "url": "https://villageapi.com/license"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Development Server"
+    },
+    {
+      "url": "https://api.villageapi.com",
+      "description": "Production Server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "User registration and authentication"
+    },
+    {
+      "name": "Search",
+      "description": "Search villages and address hierarchy"
+    },
+    {
+      "name": "Data",
+      "description": "Access geographic data"
+    },
+    {
+      "name": "User Account",
+      "description": "Manage user account and API keys"
+    },
+    {
+      "name": "Admin",
+      "description": "Admin-only analytics and user management"
+    }
+  ],
+  "paths": {
+    "/api/v1/register": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Register a new B2B user account",
+        "description": "Create a new business account. Account requires admin approval before API access.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Business email address"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "description": "Account password (minimum 8 characters)"
+                  },
+                  "businessName": {
+                    "type": "string",
+                    "description": "Name of the business"
+                  },
+                  "gstNumber": {
+                    "type": "string",
+                    "description": "GST number for verification (optional)"
+                  },
+                  "address": {
+                    "type": "string",
+                    "description": "Business address"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "description": "Business phone number"
+                  }
+                },
+                "required": ["email", "password", "businessName"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Account created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or account already exists"
+          }
+        }
+      }
+    },
+    "/api/v1/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "User login",
+        "description": "Authenticate with email and password to get JWT token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                },
+                "required": ["email", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "description": "JWT token for subsequent requests"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials or account not approved"
+          }
+        }
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "tags": ["Search"],
+        "summary": "Search villages",
+        "description": "Search villages by name, with optional state/district/subdistrict filters",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2
+            },
+            "description": "Search query (minimum 2 characters)"
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by state"
+          },
+          {
+            "name": "district",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by district"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 100
+            },
+            "description": "Number of results to return"
+          }
+        ],
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Village"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        }
+      }
+    },
+    "/api/v1/states": {
+      "get": {
+        "tags": ["Data"],
+        "summary": "Get all states",
+        "description": "List all 28 Indian states with village count",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of states",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "integer" },
+                          "name": { "type": "string" },
+                          "villageCount": { "type": "integer" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/districts": {
+      "get": {
+        "tags": ["Data"],
+        "summary": "Get districts by state",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of districts"
+          }
+        }
+      }
+    },
+    "/api/v1/user/profile": {
+      "get": {
+        "tags": ["User Account"],
+        "summary": "Get user profile",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User profile data"
+          }
+        }
+      }
+    },
+    "/api/v1/user/api-keys": {
+      "get": {
+        "tags": ["User Account"],
+        "summary": "List user's API keys",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of API keys"
+          }
+        }
+      },
+      "post": {
+        "tags": ["User Account"],
+        "summary": "Create new API key",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name for this API key"
+                  }
+                },
+                "required": ["name"]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "API key created"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "List users (admin only)",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["pending", "approved", "rejected"]
+            }
+          }
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of users"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{userId}/approve": {
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Approve user account (admin only)",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User approved"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/analytics/stats": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "Get API statistics (admin only)",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "API statistics"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Village": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Unique village ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "Village name"
+          },
+          "state": {
+            "type": "string",
+            "description": "State name"
+          },
+          "district": {
+            "type": "string",
+            "description": "District name"
+          },
+          "subdistrict": {
+            "type": "string",
+            "description": "Subdistrict/Taluk name"
+          }
+        }
+      },
+      "Meta": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Total results found"
+          },
+          "returned": {
+            "type": "integer",
+            "description": "Number of results returned"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Response timestamp"
+          },
+          "apiVersion": {
+            "type": "string",
+            "description": "API version"
+          }
+        }
+      },
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API Key format: ak_[32 hex characters]"
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT token from login endpoint"
+      }
+    }
+  }
+}
