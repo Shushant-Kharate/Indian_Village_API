@@ -7,6 +7,7 @@ const { rateLimitMiddleware } = require('./middleware/rateLimit');
 const { apiLogger } = require('./middleware/apiLogger');
 const { initializeDatabaseTables } = require('./lib/database');
 const adminRoutes = require('./routes/admin');
+const analyticsRoutes = require('./routes/analytics');
 
 const app = express();
 
@@ -420,6 +421,7 @@ app.get('/api/health', (req, res) => {
 // ADMIN ROUTES
 // ============================================
 app.use('/admin/api', auth.authMiddleware, adminRoutes);
+app.use('/admin/analytics', auth.authMiddleware, analyticsRoutes);
 
 // Start server
 const PORT = process.env.PORT || 3000;
