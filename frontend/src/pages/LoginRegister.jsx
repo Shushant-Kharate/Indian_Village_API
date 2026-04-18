@@ -25,7 +25,7 @@ export default function LoginRegister({ onLogin, isRegister = false }) {
       })
       const token = response.data.data.token
       onLogin(token)
-      navigate('/admin/dashboard')
+      navigate('/dashboard')
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed. Please try again.')
     } finally {
@@ -46,7 +46,7 @@ export default function LoginRegister({ onLogin, isRegister = false }) {
       })
       const token = response.data.data.token
       onLogin(token)
-      navigate('/admin/dashboard')
+      navigate('/dashboard')
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed. Please try again.')
     } finally {

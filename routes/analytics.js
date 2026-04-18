@@ -62,7 +62,7 @@ router.get('/overview', async (req, res) => {
       activeUsers: parseInt(activeUsers.rows[0]?.count || 0),
       todayRequests: today,
       yesterdayRequests: yesterday,
-      requestsChange: `${percentChange}%`,
+      requestsChange: parseFloat(percentChange),
       averageResponseTime: Math.round(avgResponseTime.rows[0]?.avg || 0),
       userStats: {
         total: 0,

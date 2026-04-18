@@ -8,6 +8,7 @@ const { apiLogger } = require('./middleware/apiLogger');
 const { initializeDatabaseTables } = require('./lib/database');
 const adminRoutes = require('./routes/admin');
 const analyticsRoutes = require('./routes/analytics');
+const { apiKeyRoutes } = require('./routes/apiKeys');
 
 const app = express();
 
@@ -186,6 +187,22 @@ const v1RateLimitMiddleware = (req, res, next) => {
 
 // Apply rate limiting to all v1 endpoints
 app.use('/api/v1', v1RateLimitMiddleware);
+
+// --- User Portal Endpoints ---
+app.get('/api/v1/user/profile', auth.authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, email, name, business_name as "businessName", plan, status, created_at as "createdAt" FROM users WHERE id = $1',
+      [req.userId]
+    );
+    sendResponse(res, result.rows[0]);
+  } catch (err) {
+    sendError(res, err.message, 500, 'QUERY_ERROR');
+  }
+});
+
+// Use API key routes
+app.use('/api/v1', apiKeyRoutes);
 
 // 1. Get all states
 app.get('/api/v1/states', auth.authMiddleware, async (req, res) => {

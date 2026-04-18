@@ -15,6 +15,9 @@ import LoginRegister from './pages/LoginRegister'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
+// Import B2B components
+import UserDashboard from './pages/UserDashboard'
+
 // Protected route component
 function ProtectedRoute({ children, token }) {
   if (!token) {
@@ -50,10 +53,21 @@ function App() {
     )
   }
 
-  // If authenticated, show admin dashboard with routing
+  // If authenticated, show dashboard with routing
   return (
     <Router>
       <Routes>
+        {/* B2B User Portal */}
+        <Route 
+          path="/dashboard" 
+          element={
+            <ProtectedRoute token={token}>
+              <UserDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* Admin Portal */}
         <Route
           path="/admin/*"
           element={
@@ -70,10 +84,10 @@ function App() {
             </ProtectedRoute>
           }
         />
-        {/* Redirect root to admin dashboard */}
-        <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+        {/* Redirect root to B2B dashboard */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         {/* Redirect login to dashboard if already authenticated */}
-        <Route path="/login" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/login" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Router>
   )

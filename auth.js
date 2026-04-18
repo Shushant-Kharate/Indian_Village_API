@@ -90,17 +90,21 @@ const generateApiKey = async (userId) => {
   }
 };
 
-// Verify API key
-const verifyApiKey = async (apiKey) => {
+// Verify API key (using new schema)
+const verifyApiKey = async (apiKey, apiSecret = null) => {
   try {
+    // Check both old and new schema columns just in case
     const result = await pool.query(
-      'SELECT user_id FROM api_keys WHERE api_key = $1 AND revoked = false',
+      "SELECT user_id, secret, status FROM api_keys WHERE (key = $1 OR api_key = $1) AND (status = 'active' OR revoked = false)",
       [apiKey]
     );
 
     if (result.rows.length === 0) {
-      throw new Error('Invalid API key');
+      throw new Error('Invalid or inactive API key');
     }
+    
+    // Update last_used
+    pool.query("UPDATE api_keys SET last_used = NOW() WHERE key = $1 OR api_key = $1", [apiKey]).catch(e => console.error(e));
 
     return result.rows[0].user_id;
   } catch (err) {
@@ -112,7 +116,7 @@ const verifyApiKey = async (apiKey) => {
 const getUserApiKeys = async (userId) => {
   try {
     const result = await pool.query(
-      'SELECT id, api_key, created_at, last_used, revoked FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC',
+      'SELECT id, name, key, api_key, created_at, last_used, status, revoked FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC',
       [userId]
     );
 
@@ -126,7 +130,7 @@ const getUserApiKeys = async (userId) => {
 const revokeApiKey = async (userId, apiKeyId) => {
   try {
     const result = await pool.query(
-      'UPDATE api_keys SET revoked = true WHERE id = $1 AND user_id = $2 RETURNING id',
+      "UPDATE api_keys SET status = 'revoked', revoked = true, revoked_at = NOW() WHERE id = $1 AND user_id = $2 RETURNING id",
       [apiKeyId, userId]
     );
 
@@ -144,62 +148,79 @@ const revokeApiKey = async (userId, apiKeyId) => {
 const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
+    const apiKeyHeader = req.headers['x-api-key'];
     
-    if (!authHeader) {
-      return res.status(401).json({
-        success: false,
-        error: 'Authorization header missing',
-        meta: {
-          responseTime: new Date().toISOString(),
-          requestId: `req_${Math.random().toString(36).substr(2, 9)}`
-        }
-      });
+    // Check for API key in header first
+    if (apiKeyHeader) {
+      try {
+        const userId = await verifyApiKey(apiKeyHeader, req.headers['x-api-secret']);
+        req.userId = userId;
+        req.authType = 'api_key';
+        
+        // Fetch user plan for rate limiting
+        const userPlanResult = await pool.query('SELECT plan FROM users WHERE id = $1', [userId]);
+        req.userPlan = userPlanResult.rows[0]?.plan || 'free';
+        
+        return next();
+      } catch (err) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid API Key',
+          code: 'INVALID_API_KEY',
+          meta: {
+            responseTime: new Date().toISOString(),
+            requestId: req.requestId || `req_${Math.random().toString(36).substr(2, 9)}`
+          }
+        });
+      }
     }
 
     // Check for Bearer token (JWT)
-    if (authHeader.startsWith('Bearer ')) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
       try {
         const decoded = verifyToken(token);
         req.userId = decoded.userId;
         req.authType = 'jwt';
-        next();
+        
+        // Fetch user object
+        const userResult = await pool.query('SELECT id, email, plan, status FROM users WHERE id = $1 AND status = $2', [decoded.userId, 'active']);
+        if (userResult.rows.length === 0) {
+          throw new Error('User account is inactive or not found');
+        }
+        req.user = userResult.rows[0];
+        req.userPlan = req.user.plan;
+        
+        return next();
       } catch (err) {
         return res.status(401).json({
           success: false,
           error: err.message,
           meta: {
             responseTime: new Date().toISOString(),
-            requestId: `req_${Math.random().toString(36).substr(2, 9)}`
+            requestId: req.requestId || `req_${Math.random().toString(36).substr(2, 9)}`
           }
         });
       }
     }
-    // Check for API key
-    else {
-      try {
-        const userId = await verifyApiKey(authHeader);
-        req.userId = userId;
-        req.authType = 'api_key';
-        next();
-      } catch (err) {
-        return res.status(401).json({
-          success: false,
-          error: err.message,
-          meta: {
-            responseTime: new Date().toISOString(),
-            requestId: `req_${Math.random().toString(36).substr(2, 9)}`
-          }
-        });
+
+    // No valid auth found
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication required (Bearer token or X-API-Key)',
+      meta: {
+        responseTime: new Date().toISOString(),
+        requestId: req.requestId || `req_${Math.random().toString(36).substr(2, 9)}`
       }
-    }
+    });
+
   } catch (err) {
     res.status(401).json({
       success: false,
       error: 'Authentication failed',
       meta: {
         responseTime: new Date().toISOString(),
-        requestId: `req_${Math.random().toString(36).substr(2, 9)}`
+        requestId: req.requestId || `req_${Math.random().toString(36).substr(2, 9)}`
       }
     });
   }

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Copy, Eye, EyeOff, Trash2, Plus } from 'lucide-react';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export default function UserDashboard() {
   const [user, setUser] = useState(null);
   const [apiKeys, setApiKeys] = useState([]);
@@ -11,6 +13,7 @@ export default function UserDashboard() {
   const [showNewKeyForm, setShowNewKeyForm] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
   const [visibleSecrets, setVisibleSecrets] = useState(new Set());
+  const [newKeySecret, setNewKeySecret] = useState(null);
 
   const token = localStorage.getItem('token');
 
@@ -22,9 +25,9 @@ export default function UserDashboard() {
     try {
       const headers = { Authorization: `Bearer ${token}` };
       const [userRes, keysRes, statsRes] = await Promise.all([
-        axios.get('http://localhost:3000/api/v1/user/profile', { headers }),
-        axios.get('http://localhost:3000/api/v1/user/api-keys', { headers }),
-        axios.get('http://localhost:3000/api/v1/user/usage', { headers })
+        axios.get(`${API_URL}/api/v1/user/profile`, { headers }),
+        axios.get(`${API_URL}/api/v1/user/api-keys`, { headers }),
+        axios.get(`${API_URL}/api/v1/user/usage`, { headers })
       ]);
 
       setUser(userRes.data.data);
@@ -47,14 +50,17 @@ export default function UserDashboard() {
     try {
       const headers = { Authorization: `Bearer ${token}` };
       const res = await axios.post(
-        'http://localhost:3000/api/v1/user/api-keys',
+        `${API_URL}/api/v1/user/api-keys`,
         { name: newKeyName },
         { headers }
       );
 
-      setApiKeys([...apiKeys, res.data.data]);
+      setApiKeys([res.data.data, ...apiKeys]);
       setNewKeyName('');
       setShowNewKeyForm(false);
+      if (res.data.data.secret) {
+        setNewKeySecret({ name: res.data.data.name, secret: res.data.data.secret, key: res.data.data.key });
+      }
     } catch (err) {
       alert('Failed to create API key');
     }
@@ -65,7 +71,7 @@ export default function UserDashboard() {
 
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      await axios.delete(`http://localhost:3000/api/v1/user/api-keys/${keyId}`, { headers });
+      await axios.delete(`${API_URL}/api/v1/user/api-keys/${keyId}`, { headers });
       setApiKeys(apiKeys.filter(k => k.id !== keyId));
     } catch (err) {
       alert('Failed to delete API key');
@@ -123,6 +129,41 @@ export default function UserDashboard() {
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
             {error}
+          </div>
+        )}
+
+        {newKeySecret && (
+          <div className="mb-6 p-6 bg-green-50 border border-green-200 rounded-lg">
+            <h2 className="text-lg font-bold text-green-800 mb-2">API Key Created Successfully!</h2>
+            <p className="text-green-700 mb-4">
+              Please copy your API Secret right now. <strong>It will never be shown again!</strong>
+            </p>
+            <div className="bg-white p-4 rounded border border-green-200 space-y-3">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1">API Key</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-gray-50 p-2 rounded text-sm text-gray-800">{newKeySecret.key}</code>
+                  <button onClick={() => copyToClipboard(newKeySecret.key)} className="p-2 text-gray-500 hover:text-gray-700" title="Copy Key">
+                    <Copy size={20} />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-red-500 uppercase tracking-wider font-semibold mb-1">API Secret</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-red-50 p-2 rounded text-sm text-red-800 border border-red-100">{newKeySecret.secret}</code>
+                  <button onClick={() => copyToClipboard(newKeySecret.secret)} className="p-2 text-gray-500 hover:text-gray-700" title="Copy Secret">
+                    <Copy size={20} />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setNewKeySecret(null)}
+              className="mt-4 text-green-700 font-medium hover:text-green-900 underline"
+            >
+              I have securely saved my secret
+            </button>
           </div>
         )}
 

@@ -6,8 +6,8 @@
 const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const { pool } = require('../lib/database');
-const { verifyToken } = require('./auth');
+const pool = require('../db');
+const { authMiddleware } = require('../auth');
 
 const router = express.Router();
 
@@ -24,7 +24,7 @@ const generateKeyPair = () => {
  * List user's API keys
  * GET /api/v1/user/api-keys
  */
-router.get('/user/api-keys', verifyToken, async (req, res) => {
+router.get('/user/api-keys', authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, name, key, secret, created_at, last_used, monthly_requests 
@@ -48,7 +48,7 @@ router.get('/user/api-keys', verifyToken, async (req, res) => {
  * Create new API key
  * POST /api/v1/user/api-keys
  */
-router.post('/user/api-keys', verifyToken, async (req, res) => {
+router.post('/user/api-keys', authMiddleware, async (req, res) => {
   try {
     const { name } = req.body;
 
@@ -112,7 +112,7 @@ router.post('/user/api-keys', verifyToken, async (req, res) => {
  * Delete API key
  * DELETE /api/v1/user/api-keys/:keyId
  */
-router.delete('/user/api-keys/:keyId', verifyToken, async (req, res) => {
+router.delete('/user/api-keys/:keyId', authMiddleware, async (req, res) => {
   try {
     const { keyId } = req.params;
 
@@ -147,7 +147,7 @@ router.delete('/user/api-keys/:keyId', verifyToken, async (req, res) => {
  * Rotate API secret (generates new secret for existing key)
  * POST /api/v1/user/api-keys/:keyId/rotate
  */
-router.post('/user/api-keys/:keyId/rotate', verifyToken, async (req, res) => {
+router.post('/user/api-keys/:keyId/rotate', authMiddleware, async (req, res) => {
   try {
     const { keyId } = req.params;
 
@@ -200,7 +200,7 @@ router.post('/user/api-keys/:keyId/rotate', verifyToken, async (req, res) => {
  * Get API key usage statistics
  * GET /api/v1/user/api-keys/:keyId/usage
  */
-router.get('/user/api-keys/:keyId/usage', verifyToken, async (req, res) => {
+router.get('/user/api-keys/:keyId/usage', authMiddleware, async (req, res) => {
   try {
     const { keyId } = req.params;
     const days = Math.min(parseInt(req.query.days) || 7, 30);
@@ -222,16 +222,16 @@ router.get('/user/api-keys/:keyId/usage', verifyToken, async (req, res) => {
     // Get usage stats
     const result = await pool.query(
       `SELECT 
-        DATE(timestamp) as date,
+        DATE(created_at) as date,
         COUNT(*) as total_requests,
-        SUM(CASE WHEN status >= 200 AND status < 300 THEN 1 ELSE 0 END) as successful,
-        SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as errors,
+        SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END) as successful,
+        SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as errors,
         AVG(response_time) as avg_response_time
        FROM api_logs 
-       WHERE api_key_id = $1 AND timestamp >= NOW() - INTERVAL '${days} days'
-       GROUP BY DATE(timestamp)
+       WHERE api_key = $1 AND created_at >= NOW() - INTERVAL '${days} days'
+       GROUP BY DATE(created_at)
        ORDER BY date DESC`,
-      [keyId]
+      [keyResult.rows[0].key]
     );
 
     res.json({
@@ -252,7 +252,7 @@ router.get('/user/api-keys/:keyId/usage', verifyToken, async (req, res) => {
  * Get user's daily usage
  * GET /api/v1/user/usage
  */
-router.get('/user/usage', verifyToken, async (req, res) => {
+router.get('/user/usage', authMiddleware, async (req, res) => {
   try {
     // Get today's date in UTC
     const today = new Date();
@@ -277,7 +277,7 @@ router.get('/user/usage', verifyToken, async (req, res) => {
     // Get today's usage
     const usageResult = await pool.query(
       `SELECT COUNT(*) as total FROM api_logs 
-       WHERE user_id = $1 AND timestamp >= $2`,
+       WHERE user_id = $1 AND created_at >= $2`,
       [req.user.id, today.toISOString()]
     );
 
