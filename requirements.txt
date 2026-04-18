@@ -1,0 +1,10 @@
+pandas
+psycopg2-binary
+xlrd
+jupyter
+fastapi
+uvicorn
+pydantic
+SQLAlchemy
+python-dotenv
+requests
