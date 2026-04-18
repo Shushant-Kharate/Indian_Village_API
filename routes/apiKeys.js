@@ -283,13 +283,8 @@ router.get('/user/usage', authMiddleware, async (req, res) => {
 
     const requestsUsedToday = parseInt(usageResult.rows[0].total);
 
-    // Get state access count
-    const stateResult = await pool.query(
-      `SELECT COUNT(*) FROM state_access WHERE user_id = $1`,
-      [req.user.id]
-    );
-
-    const stateAccessCount = parseInt(stateResult.rows[0].count);
+    // Hardcode limits based on plan since state_access table doesn't exist
+    const stateAccessCount = plan === 'Free' ? 1 : (plan === 'Premium' ? 5 : 28);
 
     res.json({
       success: true,
@@ -305,7 +300,7 @@ router.get('/user/usage', authMiddleware, async (req, res) => {
     });
   } catch (err) {
     console.error('Error fetching usage:', err);
-    res.status(500).json({ error: 'Failed to fetch usage stats' });
+    res.status(500).json({ error: 'Failed to fetch usage stats', details: err.message });
   }
 });
 
